@@ -5,20 +5,12 @@
 
 <div align="center">
 
-<img src="https://api.dicebear.com/7.x/shapes/svg?seed=socket-io&backgroundColor=010101&size=120" alt="Socket Service Logo" width="120" height="120">
+<img src="<img width="1488" height="407" alt="image" src="https://github.com/user-attachments/assets/b5be5739-2127-41ab-b761-1ca7aca93d76" />
+" width="120" height="120">
 
 ### A standalone Socket.io server for real-time task management
 
 ### Handles live updates, notifications, and collaborative features
-
----
-
-## Deployed Service
-
-### [https://taskflow-socket-production.up.railway.app](https://taskflow-socket-production.up.railway.app)
-
-### Socket endpoint for TaskFlow application
-
 ---
 
 **Main Application:** [https://taskflow-fawn-psi.vercel.app](https://taskflow-fawn-psi.vercel.app)
