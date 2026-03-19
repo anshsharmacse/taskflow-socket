@@ -5,8 +5,8 @@
 
 <div align="center">
 
-<img src="<img width="1397" height="645" alt="image" src="https://github.com/user-attachments/assets/4da48703-152e-4be3-9640-2cc13218e465" />
-" width="120" height="120">
+<img width="1397" height="645" alt="image" src="https://github.com/user-attachments/assets/94c8fb9d-9340-4608-8bcc-0f83f1f41eb7" />
+
 
 ### A standalone Socket.io server for real-time task management
 
