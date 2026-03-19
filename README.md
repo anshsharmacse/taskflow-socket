@@ -1,4 +1,4 @@
-```markdown
+
 # TaskFlow Socket Service
 
 # Real-time WebSocket Server
@@ -56,9 +56,11 @@ flowchart LR
         S3[Full WebSocket Support]
     end
     
-    P1 --> P2 --> P3
+    P1 --> P2
+    P2 --> P3
     P3 --> S1
-    S1 --> S2 --> S3
+    S1 --> S2
+    S2 --> S3
 ```
 
 **Problem Explained:** Vercel's serverless architecture doesn't support persistent WebSocket connections. Each serverless function is ephemeral and terminates after request completion, making real-time communication impossible.
@@ -73,23 +75,23 @@ flowchart LR
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
+    subgraph Client Layer
         C1[Web Browser]
         C2[Mobile Browser]
     end
     
-    subgraph "Frontend - Vercel"
+    subgraph Frontend - Vercel
         F1[Next.js App]
         F2[REST API]
     end
     
-    subgraph "Socket Service - Railway"
+    subgraph Socket Service - Railway
         S1[Socket.io Server]
         S2[Connection Manager]
         S3[Event Handlers]
     end
     
-    subgraph "Data Layer"
+    subgraph Data Layer
         D1[(PostgreSQL)]
     end
     
@@ -103,7 +105,7 @@ graph TB
     S2 --> S3
 ```
 
-**Integration Explained:** The socket service runs independently from the main Next.js application. Clients connect to both the REST API (for CRUD operations) and the Socket server (for real-time updates) simultaneously.
+**Integration Explained:** The socket service runs independently from the main Next.js application. Clients connect to both the REST API for CRUD operations and the Socket server for real-time updates simultaneously.
 
 ### Connection Flow
 
@@ -129,223 +131,190 @@ sequenceDiagram
     Socket->>OtherClients: Broadcast Update
 ```
 
-**Flow Explained:** Clients establish dual connections - HTTP for API calls and WebSocket for real-time updates. After authentication, clients join specific rooms based on their user ID and email for targeted notifications.
+**Flow Explained:** Clients establish dual connections - HTTP for API calls and WebSocket for real-time updates. After authentication, users join specific rooms to receive targeted notifications.
 
 ---
 
-## Features
+## Event System
 
-| Feature | Description |
-|---------|-------------|
-| **Real-time Broadcasting** | Instant task updates to all relevant users |
-| **Room-based Routing** | Targeted notifications using user rooms |
-| **Auto-reconnection** | Automatic reconnection on connection drop |
-| **CORS Protection** | Secure cross-origin requests |
-| **Graceful Fallback** | HTTP long-polling fallback if WebSocket fails |
+### Event Types
 
-### Event System
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `connection` | Client to Server | Initial WebSocket connection |
+| `authenticate` | Client to Server | Send user credentials |
+| `task:created` | Client to Server | New task created notification |
+| `task:updated` | Client to Server | Task modified notification |
+| `task:deleted` | Client to Server | Task removed notification |
+| `task:assigned` | Server to Client | Task assignment notification |
+
+### Event Flow Diagram
 
 ```mermaid
 flowchart TD
-    subgraph "Client to Server Events"
+    subgraph Client Events
         C1[task:created]
         C2[task:updated]
         C3[task:deleted]
-        C4[authenticate]
     end
     
-    subgraph "Server Processing"
+    subgraph Server Processing
         S1[Validate Event]
         S2[Find Target Rooms]
-        S3[Broadcast]
+        S3[Broadcast Event]
     end
     
-    subgraph "Server to Client Events"
-        R1[task:assigned]
-        R2[task:updated:broadcast]
-        R3[task:deleted:broadcast]
+    subgraph Client Notifications
+        N1[task:assigned]
+        N2[UI Update]
     end
     
     C1 --> S1
     C2 --> S1
     C3 --> S1
-    C4 --> S1
-    S1 --> S2 --> S3
-    S3 --> R1
-    S3 --> R2
-    S3 --> R3
+    S1 --> S2
+    S2 --> S3
+    S3 --> N1
+    N1 --> N2
 ```
 
-**Event Flow Explained:** Clients emit events for actions they perform. The server validates each event, determines which rooms should receive the notification, and broadcasts to all relevant clients.
+**Event Processing Explained:** Each event goes through validation, room identification, and broadcasting. The server determines which clients should receive the notification based on task ownership and assignment.
 
 ---
 
-## Room Strategy
+## Room System
 
 ### Room Types
 
 ```mermaid
 flowchart LR
-    subgraph "User Rooms"
-        R1[Room: user:userId]
-        R2[Room: email:userEmail]
+    subgraph User Rooms
+        R1[Room: user/userId]
+        R2[Room: email/userEmail]
     end
     
-    subgraph "Purpose"
-        P1[Direct user notifications]
-        P2[Email-based task assignment]
+    subgraph Purpose
+        P1[Personal Notifications]
+        P2[Task Assignment by Email]
     end
     
     R1 --> P1
     R2 --> P2
 ```
 
-**Room Strategy Explained:** Each user joins two rooms upon connection. The user ID room enables direct notifications. The email room ensures users receive tasks assigned to their email before they registered.
+**Room System Explained:** Each user joins two rooms upon authentication. The user ID room handles personal notifications, while the email room enables task assignment before user registration.
 
-### Broadcasting Logic
+### Room Joining Logic
 
 ```mermaid
-flowchart TD
-    A[Task Event Received] --> B{Has Assignee?}
-    B -->|Yes| C[Get Assignee Email]
-    B -->|No| D[Skip Notification]
-    C --> E{Assignee Exists?}
-    E -->|Yes| F[Get User ID]
-    E -->|No| G[Use Email Room]
-    F --> H[Join User Room]
-    G --> H
-    H --> I[Broadcast to Room]
+sequenceDiagram
+    participant Client
+    participant Server
+    
+    Client->>Server: authenticate userId email
+    Server->>Server: Validate credentials
+    Server->>Server: Join room user/userId
+    Server->>Server: Join room email/userEmail
+    Server-->>Client: authenticated success
 ```
 
-**Broadcasting Explained:** When a task is assigned, the server determines the target room. If the assignee exists, it uses their user ID room. If not, it uses the email room so the task is waiting when they sign up.
+**Join Sequence Explained:** After successful authentication, the server automatically joins the client to both their user ID room and email room. This ensures they receive all relevant notifications.
+
+---
+
+## Project Structure
+
+```
+taskflow-socket/
+├── src/
+│   └── index.ts          # Main server entry point
+├── package.json          # Dependencies and scripts
+├── tsconfig.json         # TypeScript configuration
+└── README.md             # Documentation
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | Socket.io server initialization and event handlers |
+| `package.json` | Project dependencies and run scripts |
+| `tsconfig.json` | TypeScript compiler settings |
 
 ---
 
 ## API Reference
 
-### Connection
+### Server Configuration
 
-```javascript
-// Connect to socket server
-const socket = io('https://taskflow-socket-production.up.railway.app', {
-  transports: ['websocket', 'polling'],
-  withCredentials: true
+```typescript
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CORS_ORIGIN,
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
 });
 ```
 
-### Events
+### Authentication Event
 
-#### Client to Server
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `authenticate` | `{ userId, email }` | Authenticate and join rooms |
-| `task:created` | `{ task }` | Notify new task creation |
-| `task:updated` | `{ taskId, updates }` | Notify task update |
-| `task:deleted` | `{ taskId, assigneeEmail }` | Notify task deletion |
-
-#### Server to Client
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `authenticated` | `{ success, rooms }` | Authentication confirmation |
-| `task:assigned` | `{ task }` | New task assigned to user |
-| `task:updated:broadcast` | `{ taskId, updates }` | Task update notification |
-| `task:deleted:broadcast` | `{ taskId }` | Task deletion notification |
-
-### Usage Example
-
-```javascript
-// Client-side implementation
-import { io } from 'socket.io-client';
-
-const socket = io(SOCKET_URL, {
-  transports: ['websocket', 'polling']
+```typescript
+// Client emits
+socket.emit("authenticate", {
+  userId: "user_id",
+  email: "user@example.com"
 });
 
-// Authenticate on connection
-socket.on('connect', () => {
-  socket.emit('authenticate', {
-    userId: user.id,
-    email: user.email
-  });
+// Server responds
+socket.emit("authenticated", { success: true });
+```
+
+### Task Events
+
+```typescript
+// Task created
+socket.emit("task:created", {
+  task: { id, title, assigneeEmail }
 });
 
-// Listen for task assignments
-socket.on('task:assigned', (data) => {
-  // Add new task to UI
-  addTaskToStore(data.task);
+// Task updated
+socket.emit("task:updated", {
+  taskId: "task_id",
+  updates: { status, priority }
 });
 
-// Notify on task creation
-const createTask = async (task) => {
-  const response = await fetch('/api/tasks', {
-    method: 'POST',
-    body: JSON.stringify(task)
-  });
-  
-  const newTask = await response.json();
-  socket.emit('task:created', { task: newTask });
-};
+// Task deleted
+socket.emit("task:deleted", {
+  taskId: "task_id"
+});
 ```
 
 ---
 
 ## Deployment
 
-### Railway Deployment
+### Railway Deployment Steps
 
 ```mermaid
 flowchart TD
-    subgraph "Prerequisites"
-        P1[GitHub Repository]
-        P2[Railway Account]
-        P3[Environment Variables]
-    end
-    
-    subgraph "Deployment Steps"
-        D1[Create New Project]
-        D2[Connect Repository]
-        D3[Configure Variables]
-        D4[Deploy]
-    end
-    
-    subgraph "Post-Deployment"
-        PD1[Get Service URL]
-        PD2[Update Frontend Env]
-        PD3[Test Connection]
-    end
-    
-    P1 --> D1
-    P2 --> D1
-    P3 --> D3
-    D1 --> D2 --> D3 --> D4
-    D4 --> PD1 --> PD2 --> PD3
+    A[Create GitHub Repo] --> B[Connect to Railway]
+    B --> C[Configure Environment]
+    C --> D[Set PORT variable]
+    D --> E[Set CORS_ORIGIN variable]
+    E --> F[Deploy Service]
+    F --> G[Get Railway URL]
+    G --> H[Update Main App Config]
 ```
 
-**Deployment Process Explained:** Deploy to Railway by connecting your GitHub repository, setting environment variables, and letting Railway handle the build and deployment automatically.
+**Deployment Process Explained:** The service is deployed to Railway which provides persistent WebSocket support. After deployment, update the main application with the socket URL.
 
 ### Environment Variables
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
-| `PORT` | Yes | Server port | `3003` |
-| `CORS_ORIGIN` | Yes | Allowed frontend origin | `https://taskflow-fawn-psi.vercel.app` |
-
-### Railway Configuration
-
-```toml
-# railway.toml
-[build]
-builder = "nixpacks"
-
-[deploy]
-startCommand = "bun run start"
-healthcheckPath = "/health"
-healthcheckTimeout = 100
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
-```
+| `PORT` | Yes | Server listening port | `3003` |
+| `CORS_ORIGIN` | Yes | Allowed frontend origin | `https://your-app.vercel.app` |
 
 ---
 
@@ -353,15 +322,15 @@ restartPolicyMaxRetries = 3
 
 ### Prerequisites
 
-| Requirement | Version |
-|-------------|---------|
-| Node.js | 18.x+ |
-| Bun | Latest |
+| Requirement | Version | Purpose |
+|-------------|---------|---------|
+| Node.js or Bun | 18+ / Latest | JavaScript runtime |
+| TypeScript | 5.x | Type checking |
 
 ### Quick Start
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/anshsharmacse/taskflow-socket.git
 cd taskflow-socket
 
@@ -369,68 +338,45 @@ cd taskflow-socket
 bun install
 
 # Create environment file
-cp .env.example .env
-
-# Configure variables
-# PORT=3003
-# CORS_ORIGIN=http://localhost:3000
+echo "PORT=3003" > .env
+echo "CORS_ORIGIN=http://localhost:3000" >> .env
 
 # Start development server
 bun run dev
 ```
 
-### Project Structure
+### Development Commands
 
-```
-taskflow-socket/
-├── src/
-│   └── index.ts          # Main server entry
-├── package.json
-├── tsconfig.json
-├── .env.example
-└── README.md
-```
+| Command | Description |
+|---------|-------------|
+| `bun run dev` | Start development server with hot reload |
+| `bun run build` | Build TypeScript to JavaScript |
+| `bun run start` | Start production server |
 
 ---
 
 ## Monitoring
 
-### Health Check Endpoint
-
-```javascript
-// GET /health
-{
-  "status": "ok",
-  "uptime": 3600,
-  "connections": 42
-}
-```
-
-### Logging
+### Health Check
 
 ```mermaid
 flowchart LR
-    subgraph "Log Levels"
-        L1[ERROR - Critical issues]
-        L2[WARN - Potential problems]
-        L3[INFO - Connection events]
-        L4[DEBUG - Detailed traces]
-    end
-    
-    subgraph "Log Events"
-        E1[Connection established]
-        E2[Authentication success]
-        E3[Event broadcast]
-        E4[Connection dropped]
-    end
-    
-    L3 --> E1
-    L3 --> E2
-    L4 --> E3
-    L2 --> E4
+    A[Health Request] --> B[GET /health]
+    B --> C{Server Running?}
+    C -->|Yes| D[Return 200 OK]
+    C -->|No| E[Connection Failed]
 ```
 
-**Logging Strategy Explained:** The service logs key events at appropriate levels. Connections and authentications are INFO level. Event broadcasts are DEBUG for troubleshooting. Disconnections are WARN to track potential issues.
+**Health Monitoring Explained:** Railway provides automatic health checks. A simple endpoint confirms the server is running and accepting connections.
+
+### Logging
+
+The server logs important events:
+- New client connections
+- Authentication attempts
+- Room joins
+- Event broadcasts
+- Disconnections
 
 ---
 
@@ -438,66 +384,48 @@ flowchart LR
 
 ### CORS Configuration
 
-```javascript
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CORS_ORIGIN,
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
+```mermaid
+flowchart TD
+    A[Client Request] --> B{Origin Allowed?}
+    B -->|Yes| C[Accept Connection]
+    B -->|No| D[Reject with CORS Error]
+    C --> E[Establish WebSocket]
 ```
+
+**Security Explained:** CORS ensures only the configured frontend origin can establish WebSocket connections, preventing unauthorized access.
 
 ### Authentication Flow
 
-```mermaid
-flowchart TD
-    A[Client Connects] --> B[Socket Connection]
-    B --> C[Client Emits Authenticate]
-    C --> D{Valid Credentials?}
-    D -->|Yes| E[Join User Rooms]
-    D -->|No| F[Disconnect]
-    E --> G[Confirm Authenticated]
-    F --> H[Log Security Event]
-```
-
-**Security Flow Explained:** Every socket connection must authenticate before joining rooms. Unauthenticated connections are disconnected, and security events are logged for monitoring.
+1. Client connects via WebSocket
+2. Client emits `authenticate` event with credentials
+3. Server validates and joins rooms
+4. Unauthenticated clients receive no broadcasts
 
 ---
 
 ## Performance
 
-### Connection Pooling
+### Connection Pooling Benefits
 
 ```mermaid
-graph TB
-    subgraph "Single Socket Connection"
-        S1[Client]
-        S2[Socket Connection]
-        S3[Multiple Event Channels]
+flowchart TD
+    subgraph HTTP Polling
+        H1[Multiple Requests]
+        H2[High Overhead]
+        H3[Increased Latency]
     end
     
-    subgraph "Benefits"
-        B1[Reduced Overhead]
-        B2[Lower Latency]
-        B3[Efficient Bandwidth]
+    subgraph WebSocket
+        W1[Single Connection]
+        W2[Low Overhead]
+        W3[Minimal Latency]
     end
     
-    S1 --> S2 --> S3
-    S3 --> B1
-    S3 --> B2
-    S3 --> B3
+    H1 --> H2 --> H3
+    W1 --> W2 --> W3
 ```
 
-**Pooling Benefits Explained:** A single WebSocket connection multiplexes all events, reducing connection overhead compared to multiple HTTP requests. This results in lower latency and more efficient bandwidth usage.
-
-### Scalability Considerations
-
-| Factor | Current | Future |
-|--------|---------|--------|
-| Connections | Single Instance | Socket.io Cluster |
-| Rooms | In-Memory | Redis Adapter |
-| Persistence | None | Redis for Pub/Sub |
+**Performance Benefits Explained:** A single WebSocket connection multiplexes all events, reducing connection overhead compared to multiple HTTP requests. This results in lower latency and more efficient bandwidth usage.
 
 ---
 
@@ -520,13 +448,6 @@ flowchart TD
 ```
 
 **Troubleshooting Guide Explained:** Most issues fall into four categories. CORS errors require environment variable fixes. Timeouts indicate server problems. Auth failures need credential verification. Missing events suggest room membership issues.
-
-### Debug Mode
-
-```bash
-# Enable debug logging
-DEBUG=socket.io* bun run dev
-```
 
 ---
 
@@ -559,4 +480,3 @@ This project is released under the MIT License.
 **Built with Socket.io and deployed on Railway**
 
 </div>
-```
